@@ -1,7 +1,7 @@
 # Agentic Marketplace Gateway
 
 > **Policy gateway and safety airlock for marketplace agents, with an MCP tool adapter**
-> *Built by Paul Trafford ([@elura172](https://github.com/elura172))*
+> *Built by elura172 ([@elura172](https://github.com/elura172))*
 
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
 [![Protocol](https://img.shields.io/badge/Protocol-Model%20Context%20Protocol%20(MCP)-purple.svg)](https://modelcontextprotocol.io)
@@ -163,7 +163,7 @@ agentic-marketplace-gateway/
 
 ## Author & Contact
 
-**Paul Trafford**  
+**elura172**  
 *AI Systems & Agent Infrastructure Engineer*  
 * **GitHub:** [github.com/elura172](https://github.com/elura172)  
-* **Email:** [paul.trafford@protonmail.com](mailto:paul.trafford@protonmail.com)  
+* **Email:** [228485553+elura172@users.noreply.github.com](mailto:228485553+elura172@users.noreply.github.com)  

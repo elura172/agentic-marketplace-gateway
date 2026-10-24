@@ -21,7 +21,7 @@ def print_banner():
     banner_text = (
         "[bold cyan]MARKETPLACE // AGENT SAFETY GATEWAY[/bold cyan]\n"
         "[dim]Policy decisions, idempotent retries, operator review, MCP tool adapter[/dim]\n"
-        "[dim white]Synthetic portfolio demo · Paul Trafford (@elura172)[/dim white]"
+        "[dim white]Synthetic portfolio demo · elura172 (@elura172)[/dim white]"
     )
     console.print(Panel(banner_text, border_style="cyan", box=box.DOUBLE))
 
