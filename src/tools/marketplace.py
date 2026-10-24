@@ -64,7 +64,7 @@ class MarketplaceCatalog:
                 continue
             if category and category.lower() not in item.category.lower():
                 continue
-            if max_price and item.price_jpy > max_price:
+            if max_price is not None and item.price_jpy > max_price:
                 continue
             results.append(item.model_dump())
         return results

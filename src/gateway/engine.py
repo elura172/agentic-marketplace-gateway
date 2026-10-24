@@ -3,8 +3,11 @@ Agentic Marketplace Gateway — Main Orchestration Engine.
 """
 import time
 import uuid
-from typing import Any, Dict, Optional
-from src.models.types import GateVerdict, RiskLevel, ToolCallRequest, ToolCallResult
+import threading
+from typing import Any, Dict, Optional, Union
+from pathlib import Path
+from pydantic import ValidationError
+from src.models.types import GateVerdict, RiskLevel, ToolCallRequest, ToolCallResult, TOOL_ARGUMENT_MODELS
 from src.tools.marketplace import MarketplaceCatalog
 from src.gateway.policy import PolicyEngine
 from src.gateway.airlock import Airlock
@@ -19,15 +22,34 @@ class AgenticGateway:
         catalog: Optional[MarketplaceCatalog] = None,
         policy_engine: Optional[PolicyEngine] = None,
         airlock: Optional[Airlock] = None,
+        operator_tokens=(),
+        state_db_path: Union[str, Path] = ":memory:",
     ):
         self.catalog = catalog or MarketplaceCatalog()
         self.policy = policy_engine or PolicyEngine()
-        self.airlock = airlock or Airlock()
+        self.airlock = airlock or Airlock(operator_tokens=operator_tokens, database_path=state_db_path)
+        self._dispatch_lock = threading.RLock()
 
     def dispatch(self, request: ToolCallRequest) -> ToolCallResult:
+        with self.airlock.transaction(), self._dispatch_lock:
+            return self._dispatch_locked(request)
+
+    def _dispatch_locked(self, request: ToolCallRequest) -> ToolCallResult:
         start_time = time.perf_counter()
         call_id = str(uuid.uuid4())
         payload_hash = self.airlock.compute_payload_hash(request)
+
+        argument_model = TOOL_ARGUMENT_MODELS.get(request.tool_name)
+        if argument_model is None:
+            return self._blocked_result(request, call_id, payload_hash, RiskLevel.CRITICAL,
+                                        f"Unrecognized tool '{request.tool_name}' blocked by zero-trust gateway", start_time)
+        try:
+            validated_arguments = argument_model.model_validate(request.arguments).model_dump()
+            request = request.model_copy(update={"arguments": validated_arguments})
+        except ValidationError as exc:
+            details = "; ".join(error["msg"] for error in exc.errors())
+            return self._blocked_result(request, call_id, payload_hash, RiskLevel.HIGH,
+                                        f"Invalid arguments: {details}", start_time)
 
         # 1. Idempotency Check (Fast-Path Replay)
         idempotent_replay = self.airlock.check_idempotency(request, payload_hash)
@@ -38,6 +60,9 @@ class AgenticGateway:
         catalog_item = None
         if "item_id" in request.arguments:
             catalog_item = self.catalog.get_listing(request.arguments["item_id"])
+            if catalog_item is None:
+                return self._blocked_result(request, call_id, payload_hash, RiskLevel.HIGH,
+                                            f"Listing '{request.arguments['item_id']}' not found", start_time)
 
         # 3. Dynamic Policy & Circuit Breaker Evaluation
         verdict, risk_level, reason = self.policy.evaluate(request, catalog_item)
@@ -89,9 +114,21 @@ class AgenticGateway:
 
         # Record idempotent state if key was provided
         if request.idempotency_key:
-            self.airlock.record_idempotent_result(request.idempotency_key, payload_hash, result)
+            self.airlock.record_idempotent_request(request, payload_hash, result)
 
         return result
+
+    def _blocked_result(self, request, call_id, payload_hash, risk_level, reason, start_time):
+        return ToolCallResult(
+            call_id=call_id,
+            session_id=request.session_id,
+            tool_name=request.tool_name,
+            verdict=GateVerdict.BLOCKED_POLICY,
+            risk_level=risk_level,
+            payload_hash=payload_hash,
+            reason=reason,
+            execution_time_ms=(time.perf_counter() - start_time) * 1000,
+        )
 
     def _execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         if tool_name == "search_listings":
@@ -133,8 +170,20 @@ class AgenticGateway:
         """
         Operator endpoint allowing authenticated human supervisors to release intercepted actions.
         """
-        review_entry = self.airlock.resolve_review(review_id, operator_token, approved=True)
-        # Execute the original staged tool call
-        output = self._execute_tool(review_entry["tool_name"], review_entry["arguments"])
-        review_entry["execution_output"] = output
-        return output
+        with self.airlock.transaction(), self._dispatch_lock:
+            review_entry = self.airlock.resolve_review(review_id, operator_token, approved=True)
+            self.airlock.mark_review_executing(review_id)
+        try:
+            with self._dispatch_lock:
+                output = self._execute_tool(review_entry["tool_name"], review_entry["arguments"])
+            with self.airlock.transaction():
+                self.airlock.mark_review_executed(review_id, output)
+            return output
+        except Exception:
+            with self.airlock.transaction():
+                self.airlock.mark_review_execution_failed(review_id)
+            raise
+
+    def close(self) -> None:
+        """Close the Airlock database connection owned by this gateway."""
+        self.airlock.close()

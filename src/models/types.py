@@ -2,8 +2,47 @@
 Type definitions and schemas for the Agentic Marketplace Gateway.
 """
 from enum import Enum
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Annotated, Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+
+
+class StrictToolArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class SearchListingsArguments(StrictToolArguments):
+    query: str = ""
+    category: Optional[str] = None
+    max_price: Optional[int] = None
+
+
+class GetListingArguments(StrictToolArguments):
+    item_id: Annotated[str, StringConstraints(min_length=1)]
+
+
+class UpdatePriceArguments(StrictToolArguments):
+    item_id: Annotated[str, StringConstraints(min_length=1)]
+    new_price_jpy: int
+
+
+class NotifySellerArguments(StrictToolArguments):
+    seller_id: Annotated[str, StringConstraints(min_length=1)]
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=5)]
+
+
+class FlagItemArguments(StrictToolArguments):
+    item_id: Annotated[str, StringConstraints(min_length=1)]
+    violation_type: Annotated[str, StringConstraints(min_length=1)]
+    justification: Annotated[str, StringConstraints(strip_whitespace=True, min_length=10)]
+
+
+TOOL_ARGUMENT_MODELS = {
+    "search_listings": SearchListingsArguments,
+    "get_listing": GetListingArguments,
+    "update_price": UpdatePriceArguments,
+    "notify_seller": NotifySellerArguments,
+    "flag_item": FlagItemArguments,
+}
 
 
 class RiskLevel(str, Enum):

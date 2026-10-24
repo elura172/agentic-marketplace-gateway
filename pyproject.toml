@@ -1,7 +1,7 @@
 [project]
 name = "agentic-marketplace-gateway"
 version = "0.1.0"
-description = "Deterministic Model Context Protocol (MCP) gateway & safety airlock for enterprise marketplace agents"
+description = "Marketplace agent policy gateway and safety airlock with an MCP tool adapter"
 authors = [{ name = "Paul Trafford", email = "paul.trafford@protonmail.com" }]
 readme = "README.md"
 requires-python = ">=3.11"

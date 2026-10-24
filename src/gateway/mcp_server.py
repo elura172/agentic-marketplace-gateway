@@ -1,8 +1,8 @@
 """
 Model Context Protocol (MCP) Server Interface for the Agentic Marketplace Gateway.
 """
-from typing import Any, Dict, List
-from src.models.types import ToolCallRequest, GateVerdict
+from typing import Any, Dict, List, Optional
+from src.models.types import GateVerdict, ToolCallRequest, TOOL_ARGUMENT_MODELS
 from src.gateway.engine import AgenticGateway
 
 
@@ -14,70 +14,25 @@ class MarketplaceMCPServer:
         self.gateway = gateway
 
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "name": "search_listings",
-                "description": "Search active marketplace listings by query, category, or maximum price in JPY.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "Search keyword or item title"},
-                        "category": {"type": "string", "description": "Optional category filter"},
-                        "max_price": {"type": "integer", "description": "Maximum price in Japanese Yen (JPY)"},
-                    },
-                },
-            },
-            {
-                "name": "get_listing",
-                "description": "Retrieve comprehensive details for a specific marketplace listing by ID.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "item_id": {"type": "string", "description": "Canonical item identifier (e.g. item-001)"},
-                    },
-                    "required": ["item_id"],
-                },
-            },
-            {
-                "name": "update_price",
-                "description": "Adjust the price of a listing. NOTE: Changes exceeding 15% are held in the airlock for review.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "item_id": {"type": "string", "description": "Canonical item identifier"},
-                        "new_price_jpy": {"type": "integer", "description": "Target price in Japanese Yen (JPY)"},
-                    },
-                    "required": ["item_id", "new_price_jpy"],
-                },
-            },
-            {
-                "name": "notify_seller",
-                "description": "Dispatch an automated transactional or policy notification to a seller.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "seller_id": {"type": "string", "description": "Seller identifier"},
-                        "message": {"type": "string", "description": "Notification content"},
-                    },
-                    "required": ["seller_id", "message"],
-                },
-            },
-            {
-                "name": "flag_item",
-                "description": "Flag an item for policy violation or counterfeit suspicion. Intercepted for human safety review.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "item_id": {"type": "string", "description": "Item identifier"},
-                        "violation_type": {"type": "string", "description": "Violation category (e.g. COUNTERFEIT, PROHIBITED)"},
-                        "justification": {"type": "string", "description": "Detailed reasoning and evidence"},
-                    },
-                    "required": ["item_id", "violation_type", "justification"],
-                },
-            },
-        ]
+        descriptions = {
+            "search_listings": "Search active marketplace listings by query, category, or maximum price in JPY.",
+            "get_listing": "Retrieve comprehensive details for a specific marketplace listing by ID.",
+            "update_price": "Adjust a listing price. Changes beyond the autonomous threshold are held for review.",
+            "notify_seller": "Dispatch an automated transactional or policy notification to a seller.",
+            "flag_item": "Flag an item for policy violation or counterfeit suspicion; operator review is required.",
+        }
+        definitions = []
+        for name, argument_model in TOOL_ARGUMENT_MODELS.items():
+            input_schema = argument_model.model_json_schema()
+            input_schema["additionalProperties"] = False
+            definitions.append({
+                "name": name,
+                "description": descriptions[name],
+                "inputSchema": input_schema,
+            })
+        return definitions
 
-    def handle_call_tool(self, name: str, arguments: Dict[str, Any], session_id: str = "mcp-session-default", idempotency_key: str = None) -> Dict[str, Any]:
+    def handle_call_tool(self, name: str, arguments: Dict[str, Any], session_id: str = "mcp-session-default", idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         request = ToolCallRequest(
             session_id=session_id,
             tool_name=name,
